@@ -50,6 +50,11 @@ class ConfigLoader:
     user_agent = 'Algolia DocSearch Crawler'
     only_content_level = False
     query_rules = []
+    concurrent_requests = None
+    concurrent_requests_per_domain = None
+    download_delay = None
+    randomize_download_delay = None
+    autothrottle_enabled = None
 
     # data storage, starting here attribute are not config params
     config_file = None
@@ -115,6 +120,16 @@ class ConfigLoader:
             self.update_nb_hits = bool(strtobool(self.update_nb_hits))
         if self.index_name_tmp is None:
             self.index_name_tmp = os.environ.get('INDEX_NAME_TMP', self.index_name + '_tmp')
+        self.concurrent_requests = self._get_optional_int_env(
+            'DOCSEARCH_CONCURRENT_REQUESTS', self.concurrent_requests)
+        self.concurrent_requests_per_domain = self._get_optional_int_env(
+            'DOCSEARCH_CONCURRENT_REQUESTS_PER_DOMAIN', self.concurrent_requests_per_domain)
+        self.download_delay = self._get_optional_float_env(
+            'DOCSEARCH_DOWNLOAD_DELAY', self.download_delay)
+        self.randomize_download_delay = self._get_optional_bool_env(
+            'DOCSEARCH_RANDOMIZE_DOWNLOAD_DELAY', self.randomize_download_delay)
+        self.autothrottle_enabled = self._get_optional_bool_env(
+            'DOCSEARCH_AUTOTHROTTLE_ENABLED', self.autothrottle_enabled)
 
         # Parse config
         self.selectors = SelectorsParser().parse(self.selectors)
@@ -126,6 +141,27 @@ class ConfigLoader:
         if self.allowed_domains is None:
             self.allowed_domains = UrlsParser.build_allowed_domains(
                 self.start_urls, self.stop_urls)
+
+    @staticmethod
+    def _get_optional_int_env(name, current_value):
+        value = os.environ.get(name)
+        if value is None:
+            return current_value
+        return int(value)
+
+    @staticmethod
+    def _get_optional_float_env(name, current_value):
+        value = os.environ.get(name)
+        if value is None:
+            return current_value
+        return float(value)
+
+    @staticmethod
+    def _get_optional_bool_env(name, current_value):
+        value = os.environ.get(name)
+        if value is None:
+            return current_value
+        return bool(strtobool(value))
 
     def update_nb_hits_value(self, nb_hits):
         if self.config_file is not None:

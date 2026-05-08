@@ -62,3 +62,23 @@ class ConfigValidator:
         if self.config.nb_hits_max and not isinstance(self.config.nb_hits_max,
                                                       int):
             raise Exception('nb_hits_max should be integer')
+
+        if self.config.concurrent_requests is not None and not isinstance(
+                self.config.concurrent_requests, int):
+            raise Exception('concurrent_requests should be integer')
+
+        if self.config.concurrent_requests_per_domain is not None and not isinstance(
+                self.config.concurrent_requests_per_domain, int):
+            raise Exception('concurrent_requests_per_domain should be integer')
+
+        if self.config.download_delay is not None and not isinstance(
+                self.config.download_delay, (int, float)):
+            raise Exception('download_delay should be numeric')
+
+        if self.config.randomize_download_delay is not None and not isinstance(
+                self.config.randomize_download_delay, bool):
+            raise Exception('randomize_download_delay should be boolean')
+
+        if self.config.autothrottle_enabled is not None and not isinstance(
+                self.config.autothrottle_enabled, bool):
+            raise Exception('autothrottle_enabled should be boolean')

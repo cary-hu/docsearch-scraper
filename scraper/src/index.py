@@ -75,7 +75,7 @@ def run_config(config):
 
     DEFAULT_REQUEST_HEADERS = headers
 
-    process = CrawlerProcess({
+    crawler_settings = {
         'LOG_ENABLED': '1',
         'LOG_LEVEL': 'ERROR',
         'USER_AGENT': config.user_agent,
@@ -86,7 +86,20 @@ def run_config(config):
         'DUPEFILTER_CLASS': DUPEFILTER_CLASS_PATH,
         'DEFAULT_REQUEST_HEADERS': DEFAULT_REQUEST_HEADERS,
         'TELNETCONSOLE_ENABLED': False
-    })
+    }
+
+    if config.concurrent_requests is not None:
+        crawler_settings['CONCURRENT_REQUESTS'] = config.concurrent_requests
+    if config.concurrent_requests_per_domain is not None:
+        crawler_settings['CONCURRENT_REQUESTS_PER_DOMAIN'] = config.concurrent_requests_per_domain
+    if config.download_delay is not None:
+        crawler_settings['DOWNLOAD_DELAY'] = config.download_delay
+    if config.randomize_download_delay is not None:
+        crawler_settings['RANDOMIZE_DOWNLOAD_DELAY'] = config.randomize_download_delay
+    if config.autothrottle_enabled is not None:
+        crawler_settings['AUTOTHROTTLE_ENABLED'] = config.autothrottle_enabled
+
+    process = CrawlerProcess(crawler_settings)
 
     process.crawl(
         DocumentationSpider,
