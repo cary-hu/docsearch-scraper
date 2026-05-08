@@ -25,6 +25,11 @@ Basic HTTP authentication is supported by setting these environment variables:
 - `DOCSEARCH_BASICAUTH_USERNAME`
 - `DOCSEARCH_BASICAUTH_PASSWORD`
 
+#### Custom `x-auth-token` header
+
+If the target site expects an `x-auth-token` header, set:
+- `X_AUTH_TOKEN`
+
 #### Cloudflare Access: Identity and Access Management
 
 If it happens to you to scrape sites protected by Cloudflare Access, you
