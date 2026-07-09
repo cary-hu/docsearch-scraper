@@ -48,3 +48,35 @@ class TestInit:
 
         with pytest.raises(Exception):
             ConfigLoader(c)
+
+    def test_update_mode_defaults_to_atomic(self, monkeypatch):
+        monkeypatch.delenv('DOCSEARCH_UPDATE_MODE', raising=False)
+        monkeypatch.delenv('DOCSEARCH_INCREMENTAL_DRY_RUN', raising=False)
+
+        config_loaded = ConfigLoader(config())
+
+        assert config_loaded.update_mode == 'atomic'
+        assert config_loaded.incremental_dry_run is False
+
+    def test_incremental_mode_defaults_to_dry_run(self, monkeypatch):
+        monkeypatch.setenv('DOCSEARCH_UPDATE_MODE', 'incremental')
+        monkeypatch.delenv('DOCSEARCH_INCREMENTAL_DRY_RUN', raising=False)
+
+        config_loaded = ConfigLoader(config())
+
+        assert config_loaded.update_mode == 'incremental'
+        assert config_loaded.incremental_dry_run is True
+
+    def test_incremental_dry_run_can_be_disabled(self, monkeypatch):
+        monkeypatch.setenv('DOCSEARCH_UPDATE_MODE', 'incremental')
+        monkeypatch.setenv('DOCSEARCH_INCREMENTAL_DRY_RUN', 'false')
+
+        config_loaded = ConfigLoader(config())
+
+        assert config_loaded.incremental_dry_run is False
+
+    def test_invalid_update_mode_raises(self, monkeypatch):
+        monkeypatch.setenv('DOCSEARCH_UPDATE_MODE', 'sideways')
+
+        with pytest.raises(ValueError):
+            ConfigLoader(config())

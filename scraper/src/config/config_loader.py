@@ -55,6 +55,11 @@ class ConfigLoader:
     download_delay = None
     randomize_download_delay = None
     autothrottle_enabled = None
+    update_mode = 'atomic'
+    incremental_dry_run = False
+    max_delete_ratio = 0.2
+    max_delete_count = None
+    diff_report_path = None
 
     # data storage, starting here attribute are not config params
     config_file = None
@@ -130,6 +135,7 @@ class ConfigLoader:
             'DOCSEARCH_RANDOMIZE_DOWNLOAD_DELAY', self.randomize_download_delay)
         self.autothrottle_enabled = self._get_optional_bool_env(
             'DOCSEARCH_AUTOTHROTTLE_ENABLED', self.autothrottle_enabled)
+        self._parse_update_mode_env()
 
         # Parse config
         self.selectors = SelectorsParser().parse(self.selectors)
@@ -142,17 +148,50 @@ class ConfigLoader:
             self.allowed_domains = UrlsParser.build_allowed_domains(
                 self.start_urls, self.stop_urls)
 
+    def _parse_update_mode_env(self):
+        self.update_mode = (
+            os.environ.get('DOCSEARCH_UPDATE_MODE', self.update_mode)
+            or 'atomic'
+        ).strip().lower()
+        if self.update_mode not in ['atomic', 'incremental']:
+            raise ValueError(
+                'DOCSEARCH_UPDATE_MODE must be atomic or incremental')
+
+        incremental_dry_run = os.environ.get(
+            'DOCSEARCH_INCREMENTAL_DRY_RUN')
+        if incremental_dry_run is None:
+            self.incremental_dry_run = self.update_mode == 'incremental'
+        else:
+            self.incremental_dry_run = bool(strtobool(incremental_dry_run))
+
+        self.max_delete_ratio = self._get_optional_float_env(
+            'DOCSEARCH_MAX_DELETE_RATIO', self.max_delete_ratio)
+        self.max_delete_count = self._get_optional_int_env(
+            'DOCSEARCH_MAX_DELETE_COUNT', self.max_delete_count)
+        self.diff_report_path = os.environ.get(
+            'DOCSEARCH_DIFF_REPORT_PATH', self.diff_report_path)
+
+        if self.max_delete_ratio is not None:
+            self.max_delete_ratio = float(self.max_delete_ratio)
+        if self.max_delete_count is not None:
+            self.max_delete_count = int(self.max_delete_count)
+
+        if self.max_delete_ratio is not None and self.max_delete_ratio < 0:
+            raise ValueError('DOCSEARCH_MAX_DELETE_RATIO must be positive')
+        if self.max_delete_count is not None and self.max_delete_count < 0:
+            raise ValueError('DOCSEARCH_MAX_DELETE_COUNT must be positive')
+
     @staticmethod
     def _get_optional_int_env(name, current_value):
         value = os.environ.get(name)
-        if value is None:
+        if value is None or value == '':
             return current_value
         return int(value)
 
     @staticmethod
     def _get_optional_float_env(name, current_value):
         value = os.environ.get(name)
-        if value is None:
+        if value is None or value == '':
             return current_value
         return float(value)
 
