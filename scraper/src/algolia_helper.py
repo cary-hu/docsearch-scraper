@@ -1,11 +1,31 @@
 """AlgoliaHelper
 Wrapper on top of the AlgoliaSearch API client"""
 
+import re
+
 from algoliasearch.search_client import SearchClient
 
 from builtins import range
 
 from .algolia_diff import CONTENT_HASH_FIELD
+
+INDEX_NOT_FOUND_STATUS_CODE = 404
+
+# Matches messages such as "Index phx-zhiqi-cn does not exist" or
+# "Index phx-zhiqi-cn not found".
+INDEX_NOT_FOUND_MESSAGE_RE = re.compile(
+    r'index\b.*\b(does not exist|not found)', re.IGNORECASE)
+
+
+def is_index_not_found_error(error):
+    """Return True when an Algolia error means the index does not exist."""
+    status_code = getattr(error, 'status_code', None)
+    if status_code is not None:
+        return status_code == INDEX_NOT_FOUND_STATUS_CODE
+
+    # Fallback for clients that do not expose the HTTP status code.
+    message = str(getattr(error, 'message', None) or error)
+    return bool(INDEX_NOT_FOUND_MESSAGE_RE.search(message))
 
 
 class AlgoliaHelper:
@@ -20,6 +40,7 @@ class AlgoliaHelper:
         self.query_rules = query_rules
         self.update_mode = update_mode
         self.collected_records = []
+        self.index_missing = False
         self.algolia_index = self.algolia_client.init_index(self.index_name)
         self.algolia_index_tmp = None
 
@@ -68,6 +89,12 @@ class AlgoliaHelper:
                 len(synonyms_list)))
 
     def browse_existing_records(self):
+        """Return the records currently stored in the index.
+
+        When the index does not exist yet, an empty list is returned and
+        `index_missing` is set so callers can treat the crawl as a full
+        initial import instead of failing.
+        """
         request_options = {
             'attributesToRetrieve': [
                 'objectID',
@@ -75,7 +102,24 @@ class AlgoliaHelper:
                 CONTENT_HASH_FIELD
             ]
         }
-        return list(self.algolia_index.browse_objects(request_options))
+
+        self.index_missing = False
+        records = []
+
+        try:
+            for record in self.algolia_index.browse_objects(request_options):
+                records.append(record)
+        except Exception as error:
+            if records or not is_index_not_found_error(error):
+                raise
+
+            self.index_missing = True
+            print(
+                '\033[93m> DocSearch: \033[0m{} does not exist yet, '
+                'the index will be created\033[0m'.format(self.index_name))
+            return []
+
+        return records
 
     def save_records(self, records):
         self._save_records_to_index(self.algolia_index, records)

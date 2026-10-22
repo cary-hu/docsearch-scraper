@@ -61,6 +61,7 @@ class DummyAlgoliaHelper:
         self.synonyms_applied = False
         self.collected_records = []
         self.old_records = []
+        self.index_missing = False
 
     def commit_tmp_index(self):
         self.committed = True
@@ -227,3 +228,73 @@ def test_run_config_incremental_write_deletes_and_saves(monkeypatch, tmpdir):
     assert helper.rules_applied is True
     assert helper.synonyms_applied is True
     assert tmpdir.join("report.json").check()
+
+
+def test_run_config_incremental_creates_missing_index(monkeypatch, tmpdir,
+                                                      capsys):
+    config = DummyConfig()
+    config.update_mode = "incremental"
+    config.incremental_dry_run = False
+    config.diff_report_path = str(tmpdir.join("report.json"))
+    helper = DummyAlgoliaHelper()
+    helper.index_missing = True
+    helper.collected_records = [
+        {
+            "objectID": "a",
+            "url": "https://example.com/a",
+            "content": "A",
+        },
+        {
+            "objectID": "b",
+            "url": "https://example.com/b",
+            "content": "B",
+        },
+    ]
+
+    monkeypatch.setattr(index, "ConfigLoader", lambda config_payload: config)
+    monkeypatch.setattr(index, "DefaultStrategy", lambda config_payload: DummyStrategy())
+    monkeypatch.setattr(index, "AlgoliaHelper", lambda *args, **kwargs: helper)
+    monkeypatch.setattr(index, "CrawlerProcess", DummyProcess)
+    monkeypatch.setattr(index.BrowserHandler, "destroy", lambda driver: None)
+    monkeypatch.setattr(index.AlgoliaSettings, "get", lambda config_payload, levels: {})
+
+    index.run_config(json.dumps({"index_name": "index-name"}))
+
+    assert helper.deleted == []
+    assert [record["objectID"] for record in helper.saved] == ["a", "b"]
+    assert helper.settings_applied is True
+    report = json.loads(tmpdir.join("report.json").read())
+    assert report["index_created"] is True
+    assert report["old_count"] == 0
+    assert report["to_add_count"] == 2
+    assert "was created" in capsys.readouterr().out
+
+
+def test_run_config_incremental_dry_run_reports_missing_index(monkeypatch,
+                                                             tmpdir, capsys):
+    config = DummyConfig()
+    config.update_mode = "incremental"
+    config.incremental_dry_run = True
+    config.diff_report_path = str(tmpdir.join("report.json"))
+    helper = DummyAlgoliaHelper()
+    helper.index_missing = True
+    helper.collected_records = [{
+        "objectID": "a",
+        "url": "https://example.com/a",
+        "content": "A",
+    }]
+
+    monkeypatch.setattr(index, "ConfigLoader", lambda config_payload: config)
+    monkeypatch.setattr(index, "DefaultStrategy", lambda config_payload: DummyStrategy())
+    monkeypatch.setattr(index, "AlgoliaHelper", lambda *args, **kwargs: helper)
+    monkeypatch.setattr(index, "CrawlerProcess", DummyProcess)
+    monkeypatch.setattr(index.BrowserHandler, "destroy", lambda driver: None)
+    monkeypatch.setattr(index.AlgoliaSettings, "get", lambda config_payload, levels: {})
+
+    index.run_config(json.dumps({"index_name": "index-name"}))
+
+    assert helper.saved == []
+    assert helper.settings_applied is False
+    report = json.loads(tmpdir.join("report.json").read())
+    assert report["index_created"] is True
+    assert "would be created" in capsys.readouterr().out

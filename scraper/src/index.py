@@ -147,6 +147,7 @@ def run_config(config):
 def _run_incremental_update(config, algolia_helper, settings):
     new_records = add_content_hashes(algolia_helper.get_collected_records())
     old_records = algolia_helper.browse_existing_records()
+    index_is_new = bool(getattr(algolia_helper, 'index_missing', False))
     duplicate_object_ids = find_duplicate_object_ids(new_records)
 
     try:
@@ -160,6 +161,8 @@ def _run_incremental_update(config, algolia_helper, settings):
         }
         report = build_diff_report(
             config.index_name, len(old_records), len(new_records), diff)
+        if index_is_new:
+            report["index_created"] = True
         if duplicate_object_ids:
             report["duplicate_object_ids"] = duplicate_object_ids
         report["error"] = str(error)
@@ -173,6 +176,8 @@ def _run_incremental_update(config, algolia_helper, settings):
 
     report = build_diff_report(
         config.index_name, len(old_records), len(new_records), diff)
+    if index_is_new:
+        report["index_created"] = True
     report_path = write_diff_report(report, config.diff_report_path)
 
     try:
@@ -190,6 +195,14 @@ def _run_incremental_update(config, algolia_helper, settings):
 
     if config.incremental_dry_run:
         print_diff_report(report)
+        if index_is_new:
+            print(
+                "Incremental dry-run: index '{}' does not exist, it would be "
+                "created with {} records. Report: {}".format(
+                    config.index_name, len(new_records), report_path
+                )
+            )
+            return
         print(
             "Incremental dry-run: +{} ~{} -{} unchanged {}. Report: {}".format(
                 len(diff["to_add"]),
@@ -221,6 +234,12 @@ def _run_incremental_update(config, algolia_helper, settings):
             report_path
         )
     )
+    if index_is_new:
+        print(
+            "Index '{}' did not exist and was created with {} records".format(
+                config.index_name, len(new_records)
+            )
+        )
 
 
 def _write_and_print_diff_report(report, report_path):
