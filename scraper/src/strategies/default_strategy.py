@@ -8,6 +8,7 @@ from .anchor import Anchor
 from .hierarchy import Hierarchy
 from ..config.urls_parser import UrlsParser
 from ..helpers import to_json
+from ..record_size import split_record
 import json
 import hashlib
 
@@ -205,7 +206,9 @@ class DefaultStrategy(AbstractStrategy):
                  'position': position}, sort_keys=True).encode('utf-8'))
             digest_hash = raw_hash.hexdigest()
             record['objectID'] = digest_hash
-            records.append(record)
+            # A long page is indexed as several records sharing the same URL
+            # and hierarchy, so that the whole text stays searchable.
+            records.extend(split_record(record))
 
         return records
 

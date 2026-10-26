@@ -8,6 +8,12 @@ from algoliasearch.search_client import SearchClient
 from builtins import range
 
 from .algolia_diff import CONTENT_HASH_FIELD
+from .record_size import (
+    MAX_RECORD_SIZE_BYTES,
+    fit_record_to_size,
+    record_size_bytes,
+    split_record,
+)
 
 INDEX_NOT_FOUND_STATUS_CODE = 404
 
@@ -60,6 +66,11 @@ class AlgoliaHelper:
 
     def add_records(self, records, url, from_sitemap):
         """Add new records to Algolia or collect them for incremental mode."""
+        # Crawled records are already split by the strategy; this also covers
+        # `extra_records`. It is a no-op for records that fit.
+        records = [
+            chunk for record in records for chunk in split_record(record)
+        ]
         record_count = len(records)
 
         if self.update_mode == 'incremental':
@@ -158,9 +169,35 @@ class AlgoliaHelper:
         return list(synonyms)
 
     def _save_records_to_index(self, index, records):
+        records = self._fit_records_to_size(records)
         record_count = len(records)
         for i in range(0, record_count, 50):
             index.save_objects(records[i:i + 50])
+
+    @staticmethod
+    def _fit_records_to_size(records):
+        """Shorten records that would be rejected by the Algolia size limit."""
+        fitted_records = []
+        for record in records:
+            fitted = fit_record_to_size(record)
+            if fitted is not record:
+                trimmed_size = record_size_bytes(fitted)
+                print(
+                    '\033[93m> DocSearch: \033[0mrecord {} ({}) is {} bytes, '
+                    'shortened to {} bytes to fit the Algolia record size '
+                    'limit'.format(
+                        record.get('objectID'),
+                        record.get('url'),
+                        record_size_bytes(record),
+                        trimmed_size))
+                if trimmed_size > MAX_RECORD_SIZE_BYTES:
+                    print(
+                        '\033[91m> DocSearch: \033[0mrecord {} is still {} '
+                        'bytes after trimming, Algolia will reject it. Check '
+                        'the number of attributes of that page.'.format(
+                            record.get('objectID'), trimmed_size))
+            fitted_records.append(fitted)
+        return fitted_records
 
     def _save_rules(self, index, query_rules):
         try:

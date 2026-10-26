@@ -5,6 +5,7 @@ pytest.importorskip('algoliasearch')
 from algoliasearch.exceptions import RequestException
 
 from ..algolia_helper import AlgoliaHelper, is_index_not_found_error
+from ..record_size import MAX_RECORD_SIZE_BYTES, record_size_bytes
 
 
 class FakeIndex:
@@ -90,3 +91,52 @@ def test_browse_existing_records_returns_records():
 
     assert helper.browse_existing_records() == [{'objectID': 'a'}]
     assert helper.index_missing is False
+
+
+class RecordingIndex:
+    def __init__(self):
+        self.saved_batches = []
+
+    def save_objects(self, records):
+        self.saved_batches.append(records)
+
+
+def test_save_records_shortens_records_that_exceed_the_size_limit(capsys):
+    helper = _build_helper()
+    index = RecordingIndex()
+    big_content = 'docsearch ' * 2000
+    records = [
+        {'objectID': 'big', 'content': big_content,
+         'content_camel': big_content},
+        {'objectID': 'small', 'content': 'short'},
+    ]
+
+    helper._save_records_to_index(index, records)
+
+    saved = index.saved_batches[0]
+    assert record_size_bytes(saved[0]) <= MAX_RECORD_SIZE_BYTES
+    assert saved[1] == records[1]
+    # The crawled record is left untouched for the incremental diff.
+    assert records[0]['content'] == big_content
+    assert 'shortened to' in capsys.readouterr().out
+
+
+def test_add_records_splits_records_that_are_too_big(capsys):
+    helper = _build_helper()
+    content = 'DocSearch indexes documentation pages. ' * 500
+    records = [{
+        'objectID': 'extra',
+        'content': content,
+        'content_camel': content,
+        'url': 'https://example.com/docs',
+    }]
+
+    helper.add_records(records, 'Extra records', False)
+
+    collected = helper.get_collected_records()
+    assert len(collected) > 1
+    assert all(record_size_bytes(record) <= MAX_RECORD_SIZE_BYTES
+               for record in collected)
+    assert ''.join(record['content'] for record in collected) == content
+    assert len({record['objectID'] for record in collected}) == len(collected)
+    assert '{} records'.format(len(collected)) in capsys.readouterr().out
